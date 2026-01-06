@@ -1,1 +1,72 @@
 
+CREATE TABLE companies (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE warehouses (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id INT UNSIGNED NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    location VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES companies(id)
+);
+
+CREATE TABLE products (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    sku VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    is_bundle BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE inventory (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    product_id INT UNSIGNED NOT NULL,
+    warehouse_id INT UNSIGNED NOT NULL,
+    quantity INT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE (product_id, warehouse_id),
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
+);
+
+CREATE TABLE inventory_history (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    product_id INT UNSIGNED NOT NULL,
+    warehouse_id INT UNSIGNED NOT NULL,
+    quantity_before INT,
+    quantity_after INT,
+    change_reason VARCHAR(255),
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
+);
+
+CREATE TABLE suppliers (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    contact_email VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE supplier_products (
+    supplier_id INT UNSIGNED NOT NULL,
+    product_id INT UNSIGNED NOT NULL,
+    supply_price DECIMAL(10,2),
+    PRIMARY KEY (supplier_id, product_id),
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+CREATE TABLE product_bundles (
+    bundle_id INT UNSIGNED NOT NULL,
+    child_product_id INT UNSIGNED NOT NULL,
+    quantity INT NOT NULL,
+    PRIMARY KEY (bundle_id, child_product_id),
+    FOREIGN KEY (bundle_id) REFERENCES products(id),
+    FOREIGN KEY (child_product_id) REFERENCES products(id)
+);
