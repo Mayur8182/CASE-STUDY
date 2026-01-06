@@ -1,71 +1,74 @@
-1. No Transaction Management (Major Issue)
-
-The product is committed to the database first.
-
-Inventory is committed in a separate operation.
-
-If inventory creation fails, the product remains saved.
-
-Impact:
-
-Leads to data inconsistency
-
-Orphan product records without inventory
-
-2. Multiple Commits
+`1.  Multiple Commits
 
 Two separate db.session.commit() calls are used.
 
-Impact:
+2. No Transaction Management
 
-Partial data persistence
+The product is committed to the database first.
+Inventory is committed in a separate operation.
+If inventory creation fails, the product remains saved.
 
-Increased risk of inconsistent state
-
-Poor performance due to multiple database commits
-
-3. No Error Handling
-
+3. No Error Handling  
 No try/except block is implemented.
-
 Any runtime or database error results in an unhandled 500 response.
 
-Impact:
-
-Application crashes
-
-No graceful error response to clients
-
-4. No Rollback on Failure
+5. No Rollback on Failure
 
 Database session is not rolled back if an error occurs.
 
-Impact:
-
-Corrupted or incomplete data remains in the database
-
-Manual cleanup may be required
-
 5. No Input Validation
-
 Required fields are not validated.
-
 Missing fields cause KeyError.
-
 Negative values for price or quantity are allowed.
 
-Impact:
+@app.route('/api/products', methods=['POST'])
+def create_product():
+    try:
+        # Safe JSON handling
+        data = request.get_json()
+        if not data:
+            return {"error": "Invalid JSON"}, 400
 
-Invalid business data stored
+        # Field validation
+        required = ['name', 'sku', 'price', 'warehouse_id', 'initial_quantity']
+        for field in required:
+            if field not in data:
+                return {"error": f"{field} is required"}, 400
 
-Runtime exceptions during request handling
+        if data['price'] <= 0:
+            return {"error": "Price must be positive"}, 400
 
-6. Unsafe request.json Usage
+        if data['initial_quantity'] < 0:
+            return {"error": "Quantity cannot be negative"}, 400
 
-Uses request.json directly without validation.
+        #  Create objects
+        product = Product(
+            name=data['name'],
+            sku=data['sku'],
+            price=data['price'],
+            warehouse_id=data['warehouse_id']
+        )
 
-If request body is empty or invalid, request.json becomes None.
+        inventory = Inventory(
+            product=product,   # Relationship usage
+            warehouse_id=data['warehouse_id'],
+            quantity=data['initial_quantity']
+        )
 
-Impact:
+        #  Single transaction
+        db.session.add_all([product, inventory])
+        db.session.commit()
 
-Causes runtime errors such as TypeError: 'NoneType' object is not subscriptable
+        return {
+            "message": "Product created successfully",
+            "product_id": product.id
+        }, 201
+
+    except Exception as e:
+        #  Rollback on failure
+        db.session.rollback()
+        return {"error": str(e)}, 500
+
+
+
+    
