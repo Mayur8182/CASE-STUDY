@@ -1,0 +1,130 @@
+
+Table 
+
+companies(id)
+warehouses(id, company_id, name)
+products(id, name, sku, product_type)
+inventory(product_id, warehouse_id, quantity)
+sales(product_id, warehouse_id, quantity, sold_at)
+suppliers(id, name, contact_email)
+supplier_products(product_id, supplier_id)
+
+API Endpoint
+GET /api/companies/{company_id}/alerts/low-stock
+
+from flask import Flask, jsonify
+from datetime import datetime, timedelta
+from sqlalchemy import func
+
+app = Flask(__name__)
+
+@app.route("/api/companies/<int:company_id>/alerts/low-stock", methods=["GET"])
+def low_stock_alerts(company_id):
+    """
+    Returns low-stock alerts for a given company
+    """
+
+    alerts = []
+
+    # Assumption: threshold based on product type
+    PRODUCT_THRESHOLDS = {
+        "electronics": 20,
+        "grocery": 50,
+        "default": 10
+    }
+
+    # Recent sales window
+    recent_days = 30
+    recent_date = datetime.utcnow() - timedelta(days=recent_days)
+
+    # Get all warehouses for the company
+    warehouses = db.session.query(Warehouse).filter_by(company_id=company_id).all()
+
+    if not warehouses:
+        return jsonify({"alerts": [], "total_alerts": 0})
+
+    for warehouse in warehouses:
+
+        # Join inventory + product
+        inventory_rows = (
+            db.session.query(Inventory, Product)
+            .join(Product, Inventory.product_id == Product.id)
+            .filter(Inventory.warehouse_id == warehouse.id)
+            .all()
+        )
+
+        for inventory, product in inventory_rows:
+
+            # Get recent sales for product
+            sales_data = (
+                db.session.query(func.sum(Sale.quantity).label("total_sold"))
+                .filter(
+                    Sale.product_id == product.id,
+                    Sale.warehouse_id == warehouse.id,
+                    Sale.sold_at >= recent_date
+                )
+                .first()
+            )
+
+            # Skip products with no recent sales
+            if not sales_data.total_sold:
+                continue
+
+            # Determine threshold
+            threshold = PRODUCT_THRESHOLDS.get(
+                product.product_type,
+                PRODUCT_THRESHOLDS["default"]
+            )
+
+            # Check low stock
+            if inventory.quantity >= threshold:
+                continue
+
+            # Calculate average daily sales
+            avg_daily_sales = sales_data.total_sold / recent_days
+
+            # Avoid division by zero
+            if avg_daily_sales <= 0:
+                continue
+
+            days_until_stockout = int(inventory.quantity / avg_daily_sales)
+
+            # Fetch supplier info
+            supplier = (
+                db.session.query(Supplier)
+                .join(SupplierProduct)
+                .filter(SupplierProduct.product_id == product.id)
+                .first()
+            )
+
+            alerts.append({
+                "product_id": product.id,
+                "product_name": product.name,
+                "sku": product.sku,
+                "warehouse_id": warehouse.id,
+                "warehouse_name": warehouse.name,
+                "current_stock": inventory.quantity,
+                "threshold": threshold,
+                "days_until_stockout": days_until_stockout,
+                "supplier": {
+                    "id": supplier.id if supplier else None,
+                    "name": supplier.name if supplier else None,
+                    "contact_email": supplier.contact_email if supplier else None
+                }
+            })
+
+    return jsonify({
+        "alerts": alerts,
+        "total_alerts": len(alerts)
+    })
+
+
+Edge Cases
+
+Edge Case	Handling
+No warehouses	Return empty alerts
+No recent sales	Product ignored
+Zero sales rate	Avoid divide-by-zero
+No supplier	Supplier fields = null
+Multiple warehouses	Loop per warehouse
+Threshold missing	Use default
