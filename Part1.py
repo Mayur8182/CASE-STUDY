@@ -1,3 +1,30 @@
+1.  Multiple Commits
+
+Two separate db.session.commit() calls are used.
+
+2. No Transaction Management
+
+The product is committed to the database first.
+Inventory is committed in a separate operation.
+If inventory creation fails, the product remains saved.
+
+3. No Error Handling  
+No try/except block is implemented.
+Any runtime or database error results in an unhandled 500 response.
+
+5. No Rollback on Failure
+
+Database session is not rolled back if an error occurs.
+
+5. No Input Validation
+Required fields are not validated.
+Missing fields cause KeyError.
+Negative values for price or quantity are allowed.
+
+
+
+
+
 @app.route('/api/products', methods=['POST'])
 def create_product():
     try:
